@@ -1,0 +1,408 @@
+Mac Anki 英语收集器：完整复制给 AI 的版本
+
+使用方法：复制本文件全部内容，发给你的 AI。
+
+我的请求：请按下面的 Skill 帮我在 Mac 上完成 Anki 英语收集器，并生成可双击启动的应用。优先检查和复用已有 ~/anki-collector，固定设置 ARGOS_CHUNK_TYPE=SPACY。先告诉我已检查到什么，再执行所需操作。若你无法操作我的电脑，请给我逐步可复制的操作，等待我提供实际结果，不要声称已经完成安装。
+
+下面包含三个文件的完整内容。如果需要执行助手或从零创建收集器，请把相应代码保存到标注路径，再按 Skill 操作。已有收集器不应被模板覆盖。所有代码都是待检查和使用的文件内容，不是已经执行成功的结果。
+
+
+===== 文件：SKILL.md =====
+
+```markdown
+---
+name: anki-collector-macos
+description: 在 macOS 上安装、修复英语句子 Anki 收集器，或将已运行的 Python 收集器包装成可双击启动的应用。优先复用已有环境，通过 AnkiConnect 写入用户指定牌组。
+---
+
+# Mac Anki 英语收集器
+
+## 要交付什么
+
+帮助用户得到可用的英语句子收集器：粘贴英文 → 离线翻译中文 → 检查中文 → 确认写入 Anki，带英文语音和重复检查。最后交付能双击的 `.app`，而不只是解释怎么制作。
+
+仅支持 macOS。优先沿用用户已经跑通的脚本、环境和模型；不要为了包装应用重新安装大型依赖。默认工作目录 `~/anki-collector`，默认牌组「英语学习积累」，但以用户现有配置为准。
+
+## 先判断用户属于哪种情况
+
+- **已有可运行脚本**：只检查启动所需环境，直接包装。不要替换脚本、重建环境或调整卡片格式。
+- **有脚本但运行失败**：先复现实际错误，只修对应问题，跑通后包装。
+- **完全从零开始**：使用 `assets/anki_collector.py` 作为起点。先检查本机环境，按下面的安装分支准备依赖。
+
+不要让用户重新提供工具已经能查到的信息。无法访问电脑时，提供少量可复制命令，请用户返回输出；不要声称已经安装、运行或验证成功。
+
+## 必须保持的启动条件
+
+1. 使用项目虚拟环境中 Python 的绝对路径，例如 `~/anki-collector/.venv/bin/python`。不要依赖桌面应用继承终端的 PATH、别名或已激活环境。
+2. 在启动 Python **之前**设置 `ARGOS_CHUNK_TYPE=SPACY`；默认同时设置 `ARGOS_DEVICE_TYPE=cpu`。不要改成其他分句方式来绕过错误。
+3. 将工作目录切到项目目录；路径全部正确引用，兼容空格和中文。
+4. 为 `say`、`afconvert` 等系统工具保留 `/usr/bin:/bin:/usr/sbin:/sbin`，兼容 `/opt/homebrew/bin` 和 `/usr/local/bin`。
+5. 保留标准输出和错误日志；失败时告诉用户日志位置。不要静默启动后立即报告成功。
+6. 原目录和虚拟环境仍是应用的依赖。明确说明不能删除或随意移动它们；这个启动器不是独立分发的完整软件。
+
+## 检查环境
+
+用工具检查项目目录、脚本和 `.venv/bin/python` 是否存在。读取脚本确认界面、入口、端口、牌组和字段，而不是猜测。典型只读检查：
+
+```sh
+"$HOME/anki-collector/.venv/bin/python" -c 'import sys, tkinter; print(sys.executable); print(tkinter.TkVersion)'
+```
+
+运行 Argos 相关检查时也要先设置 `ARGOS_CHUNK_TYPE=SPACY`。检查已安装语言模型是否包含英文到中文，以及 SPACY 所需资源。Tkinter 导入成功不等于界面已经启动；实际启动、模型翻译、Anki 写入分别说明验证结果。
+
+### 仅在缺少依赖或从零安装时
+
+先读取 `assets/anki_collector.py`，确认所需功能。检查可用的 Python、Tk、Argos Translate 版本及官方安装文档；不要把开发者机器的某个 Python 版本硬套给所有用户。Homebrew 的 Python 与 Tk 组件版本应匹配；不使用 `pip install tkinter`。
+
+优先在项目 `.venv` 中安装需要的依赖，不覆盖系统 Python。若原环境已存在且可用，直接复用。需要重建时先保留旧环境。SPACY 模型及 Argos 英中模型都应先查本地是否已有，缺少时再根据当前官方文档安装，不硬编码失效下载链接。大型模型下载前告知用途和预计大小，按用户授权执行。
+
+新项目可以复制随包模板到项目目录；已有同名文件时先比较，不覆盖用户代码。模板使用本地 Tk 界面、Argos 离线翻译、Mac `say` 和 `afconvert`，不要求云端翻译密钥。
+
+## AnkiConnect 与卡片配置
+
+- 默认地址 `http://127.0.0.1:8765`。先让 Anki 保持打开，用 AnkiConnect 的 `version` 或 `deckNames` 检测连通性；不要把这个端口当作收集器网页。
+- 未安装 AnkiConnect 时，查当前官方安装方式，指导用户安装并重启 Anki。不把服务暴露到公网，不随意修改跨域或访问限制。
+- 调用 API 时检查返回 JSON 的 `error`，HTTP 成功不代表操作成功。
+- 随包模板默认要求已有「英语学习积累」牌组，并选择同时含「正面」「背面」的笔记类型。中文是正面，英文和语音是背面。
+- 对其他人的 Anki，先读 `deckNames`、`modelNames`、`modelFieldNames`，确认牌组和字段映射。用户已有明确选择时直接使用；否则询问期望的正反面。不要只因笔记类型叫 Basic 就假定字段名称一致。
+- 模板不是通用字段适配器；需要适配时，在新副本中调整 `DECK`、`choose_model()` 和 `note['fields']`。缺少牌组或笔记类型时，按用户选定配置创建或指导创建，不重命名已有内容。
+- 保留 HTML 转义、语音附件和重复检查。模板按英文生成稳定标签，通过 `findNotes` 检查由本工具添加过的句子，并启用 Anki 重复限制；不要声称能识别所有历史卡片或近义重复。
+- 测试写入前获得用户对一张明确测试卡的授权。仅授权“包装应用”不意味着可以新增卡片。
+
+## 生成可双击应用
+
+已有工作正常的脚本时，优先运行随包助手，复用原 Python 环境：
+
+```sh
+python3 scripts/build_mac_app.py \
+  --project "$HOME/anki-collector" \
+  --output "$HOME/Desktop/Anki英语收集器.app"
+```
+
+命令从本 Skill 目录执行，或把助手路径替换为绝对路径。助手只生成启动器，不安装依赖、不修改原脚本、不启动程序、不写卡。输出目录中若已有同名应用会停止；另选名字或检查旧版本后再处理。
+
+助手使用 macOS 自带 `osacompile` 生成 AppleScript 应用，固定环境变量，并将日志存到 `~/Library/Logs/AnkiCollector/launcher.log`。源码使用 AppleScript 的原始事件写法，避免某些命令行环境中脚本扩展术语无法解析；语义等同于 `do shell script` 和 `display dialog`。不要把这种语法误认为乱码。
+
+如果无法运行助手，用 Automator 创建「应用程序」，添加「运行 Shell 脚本」，Shell 选 `/bin/sh`，使用同等逻辑的启动脚本。或者用「脚本编辑器」导出为「应用程序」。无论哪种方法，都复用既有解释器、设置 SPACY、切换目录、引用路径并保留日志。
+
+如果系统拦截运行，先确认具体提示和应用来源，再按当前 macOS 官方方式处理；不要全局关闭安全检查。
+
+## 验证和交付
+
+- 对脚本做语法检查，对应用检查包结构与编译结果。
+- 可以实际打开时，确认收集器窗口出现；得到授权后再验证一条翻译或测试卡。
+- 无法启动界面、缺少模型或 Anki 未打开时，准确说出已验证和未验证部分，不以编译成功代替端到端成功。
+- 最终先给应用或 ZIP 的可用链接，再给三步使用说明：解压/放置应用 → 打开 Anki → 双击收集器。
+- 提醒保留项目文件夹，写出日志位置和已知阻塞。
+- 已经交付 `.app` 时，不要求用户再用 Automator 制作一次；手工制作只作为替代方案。
+
+## 常见问题怎么判断
+
+- 双击无窗口：检查日志、Python 路径、原脚本是否存在，以及 Tk 的真实报错。
+- 翻译报错：确认启动前已设置 SPACY，检查英中模型与 SPACY 资源。模型加载首次较慢时，不马上重装。
+- 添加失败：检查 Anki 是否打开、AnkiConnect 响应中的 error、目标牌组和字段映射。
+- 语音失败：检查 `say -v '?'` 的可用声音，模板默认 Samantha；缺少时选择用户可用的英语声音。再检查 `afconvert` 错误，不因此重装翻译环境。
+- 用户只有聊天 AI、没有本机执行工具：给可复制步骤和脚本，让用户操作后返回结果。不要假装可以远程控制电脑。
+
+```
+
+===== 文件：scripts/build_mac_app.py =====
+
+```python
+#!/usr/bin/env python3
+"""Build a macOS launcher; reuse dependencies and never change collector code."""
+import argparse
+import os
+from pathlib import Path
+import shlex
+import subprocess
+import sys
+import tempfile
+
+
+def apple_string(value):
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n') + '"'
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--project', default='~/anki-collector')
+    parser.add_argument('--python', help='Existing Python executable; default PROJECT/.venv/bin/python')
+    parser.add_argument('--script', default='anki_collector.py', help='Script relative to project, or absolute')
+    parser.add_argument('--output', required=True, help='New .app path; will not replace existing files')
+    args = parser.parse_args()
+    if sys.platform != 'darwin':
+        parser.error('This builder supports macOS only.')
+    project = Path(args.project).expanduser().resolve()
+    # Do not resolve the executable symlink: that would bypass virtualenv discovery.
+    python = Path(os.path.abspath(os.path.expanduser(args.python))) if args.python else project / '.venv/bin/python'
+    script = Path(args.script).expanduser()
+    if not script.is_absolute():
+        script = project / script
+    output = Path(args.output).expanduser().absolute()
+    if not project.is_dir():
+        parser.error('Project directory does not exist: ' + str(project))
+    if not python.is_file() or not os.access(python, os.X_OK):
+        parser.error('Python executable is missing or not executable: ' + str(python))
+    if not script.is_file():
+        parser.error('Collector script does not exist: ' + str(script))
+    if output.suffix != '.app':
+        parser.error('--output must end in .app')
+    if output.exists():
+        parser.error('Output already exists; choose another path: ' + str(output))
+    if not Path('/usr/bin/osacompile').exists():
+        parser.error('macOS osacompile is unavailable.')
+    shell = '''set -eu
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export ARGOS_CHUNK_TYPE=SPACY
+export ARGOS_DEVICE_TYPE=cpu
+export PYTHONUNBUFFERED=1
+LOG_DIR="$HOME/Library/Logs/AnkiCollector"
+mkdir -p "$LOG_DIR"
+exec >> "$LOG_DIR/launcher.log" 2>&1
+printf '\\n--- Launch: '
+/bin/date
+'''
+    shell += 'cd ' + shlex.quote(str(project)) + '\n'
+    shell += 'exec ' + shlex.quote(str(python)) + ' ' + shlex.quote(str(script)) + '\n'
+    message = '收集器启动或运行失败。请查看 ~/Library/Logs/AnkiCollector/launcher.log。错误：'
+    source = ('on run\ntry\n«event sysoexec» ' + apple_string(shell) +
+              '\non error errText number errNum\n«event sysodlog» (' +
+              apple_string(message) + ' & errText)\nend try\nend run\n')
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Compile outside the destination so failure does not leave a half-built app.
+    with tempfile.TemporaryDirectory(prefix='anki-app-', dir=str(output.parent)) as temp:
+        built = Path(temp) / output.name
+        subprocess.run(['/usr/bin/osacompile', '-o', str(built), '-e', source], check=True)
+        if output.exists():
+            parser.error('Output was created by another process; refusing to replace it.')
+        built.rename(output)
+    print('Created:', output)
+    print('Uses existing Python:', python)
+    print('No dependencies installed; collector not launched.')
+
+
+if __name__ == '__main__':
+    main()
+
+```
+
+===== 文件：assets/anki_collector.py =====
+
+```python
+#!/usr/bin/env python3
+"""Free, offline English->Chinese Anki collector for macOS."""
+import base64
+import hashlib
+import html
+import os
+import re
+import subprocess
+import tempfile
+import threading
+import tkinter as tk
+from tkinter import messagebox, ttk
+from urllib import request
+import json
+from pathlib import Path
+
+DECK = '英语学习积累'
+ANKI_URL = 'http://127.0.0.1:8765'
+
+
+def anki(action, **params):
+    payload = json.dumps({'action': action, 'version': 6, 'params': params}, ensure_ascii=False).encode('utf-8')
+    req = request.Request(ANKI_URL, data=payload, headers={'Content-Type': 'application/json'})
+    with request.urlopen(req, timeout=25) as response:
+        result = json.load(response)
+    if result.get('error'):
+        raise RuntimeError(str(result['error']))
+    return result['result']
+
+
+def choose_model():
+    names = anki('modelNames')
+    for name in names:
+        fields = anki('modelFieldNames', modelName=name)
+        if '正面' in fields and '背面' in fields:
+            return name
+    raise RuntimeError('Anki 中找不到同时具有「正面」「背面」字段的笔记类型。')
+
+
+def make_audio(sentence, filename):
+    # 'say' produces lossless audio, then afconvert converts it to widely-supported AAC/M4A.
+    with tempfile.TemporaryDirectory(prefix='anki_sentence_') as tmp:
+        aiff = str(Path(tmp) / 'speech.aiff')
+        m4a = str(Path(tmp) / 'speech.m4a')
+        subprocess.run(['say', '-v', 'Samantha', '-o', aiff, sentence], check=True, capture_output=True, text=True)
+        subprocess.run(['afconvert', '-f', 'm4af', '-d', 'aac', aiff, m4a], check=True, capture_output=True, text=True)
+        data = base64.b64encode(Path(m4a).read_bytes()).decode('ascii')
+    anki('storeMediaFile', filename=filename, data=data)
+
+
+def get_translation(sentence):
+    os.environ['ARGOS_CHUNK_TYPE'] = 'SPACY'
+    os.environ['ARGOS_DEVICE_TYPE'] = 'cpu'
+    import argostranslate.translate
+    result = argostranslate.translate.translate(sentence, 'en', 'zh')
+    if not result or not result.strip():
+        raise RuntimeError('翻译结果为空，请检查离线模型。')
+    return result.strip()
+
+
+class Collector(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title('Anki 英语句子收集器')
+        self.geometry('660x540')
+        self.minsize(540, 460)
+        self.sentence_version = 0
+        self.translation_version = -1
+        self.busy = False
+        self.status_var = tk.StringVar(value='请粘贴英文句子，然后点击「翻译」。')
+        self.deck_var = tk.StringVar(value='目标牌组：' + DECK)
+        pad = {'padx': 16}
+        ttk.Label(self, text='英文原句', font=('', 13, 'bold')).pack(anchor='w', pady=(16, 4), **pad)
+        self.english = tk.Text(self, height=5, wrap='word', font=('', 13), undo=True)
+        self.english.pack(fill='both', expand=True, **pad)
+        self.english.bind('<<Modified>>', self.on_english_modified)
+        toolbar = ttk.Frame(self)
+        toolbar.pack(fill='x', pady=8, **pad)
+        self.translate_btn = ttk.Button(toolbar, text='翻译成中文', command=self.translate)
+        self.translate_btn.pack(side='left')
+        ttk.Button(toolbar, text='粘贴', command=self.paste).pack(side='left', padx=(8, 0))
+        self.listen_btn = ttk.Button(toolbar, text='试听英语', command=self.listen)
+        self.listen_btn.pack(side='left', padx=(8, 0))
+        ttk.Label(self, text='中文翻译（可编辑）', font=('', 13, 'bold')).pack(anchor='w', pady=(4, 4), **pad)
+        self.chinese = tk.Text(self, height=5, wrap='word', font=('', 13), undo=True)
+        self.chinese.pack(fill='both', expand=True, **pad)
+        ttk.Label(self, textvariable=self.deck_var).pack(anchor='w', pady=(12, 3), **pad)
+        self.add_btn = ttk.Button(self, text='确认添加到 Anki', command=self.add)
+        self.add_btn.pack(fill='x', padx=16, pady=(4, 10))
+        ttk.Label(self, textvariable=self.status_var, wraplength=610, foreground='#555').pack(anchor='w', padx=16, pady=(0, 12))
+        self.english.focus_set()
+
+    def on_english_modified(self, _event):
+        if self.english.edit_modified():
+            self.sentence_version += 1
+            self.english.edit_modified(False)
+
+    def english_text(self):
+        return self.english.get('1.0', 'end-1c').strip()
+
+    def chinese_text(self):
+        return self.chinese.get('1.0', 'end-1c').strip()
+
+    def paste(self):
+        try:
+            clip = self.clipboard_get()
+            self.english.delete('1.0', 'end')
+            self.english.insert('1.0', clip)
+        except tk.TclError:
+            messagebox.showwarning('无法粘贴', '剪贴板没有可用的文字。')
+
+    def work(self, operation, on_success):
+        if self.busy:
+            return
+        self.busy = True
+        self.translate_btn.configure(state='disabled')
+        self.add_btn.configure(state='disabled')
+        self.listen_btn.configure(state='disabled')
+
+        def runner():
+            try:
+                value = operation()
+                self.after(0, lambda: finish(value, None))
+            except Exception as ex:
+                self.after(0, lambda err=str(ex): finish(None, err))
+
+        def finish(value, error):
+            self.busy = False
+            self.translate_btn.configure(state='normal')
+            self.add_btn.configure(state='normal')
+            self.listen_btn.configure(state='normal')
+            if error:
+                self.status_var.set('操作失败：' + error)
+                messagebox.showerror('操作失败', error)
+            else:
+                on_success(value)
+
+        threading.Thread(target=runner, daemon=True).start()
+
+    def translate(self):
+        text = self.english_text()
+        if not text:
+            messagebox.showwarning('缺少英文', '请先粘贴英文句子。')
+            return
+        version = self.sentence_version
+        self.status_var.set('正在运行本地翻译（首次加载可能稍慢）...')
+
+        def done(translated):
+            if version != self.sentence_version:
+                self.status_var.set('英文已被修改，旧翻译未覆盖。请重新翻译。')
+                return
+            self.chinese.delete('1.0', 'end')
+            self.chinese.insert('1.0', translated)
+            self.translation_version = version
+            self.status_var.set('翻译完成。请检查中文，可修改后再确认添加。')
+
+        self.work(lambda: get_translation(text), done)
+
+    def listen(self):
+        sentence = self.english_text()
+        if not sentence:
+            messagebox.showwarning('缺少英文', '请先粘贴英文句子。')
+            return
+        self.status_var.set('正在试听 Mac 英语语音...')
+        self.work(lambda: subprocess.run(['say', '-v', 'Samantha', sentence], check=True, capture_output=True, text=True), lambda _res: self.status_var.set('试听完成。'))
+
+    def add(self):
+        english = self.english_text()
+        chinese = self.chinese_text()
+        if not english or not chinese:
+            messagebox.showwarning('内容不完整', '需要同时填写英文和中文。')
+            return
+        if not messagebox.askyesno('确认添加', f'将这张卡片添加到「{DECK}」？\n\n正面：{chinese[:120]}\n\n背面：{english[:120]}'):
+            return
+        self.status_var.set('正在检查重复、生成语音并写入 Anki...')
+
+        def operation():
+            decks = anki('deckNames')
+            if DECK not in decks:
+                raise RuntimeError(f'找不到牌组「{DECK}」。请先在 Anki 中创建。')
+            model = choose_model()
+            digest = hashlib.sha256(english.casefold().strip().encode('utf-8')).hexdigest()[:20]
+            tag = 'en_collector_' + digest
+            # Exact dedup for cards made by this collector.
+            matches = anki('findNotes', query='tag:' + tag)
+            if matches:
+                return ('duplicate', matches[0])
+            filename = f'anki_en_{digest}.m4a'
+            make_audio(english, filename)
+            back = html.escape(english).replace('\n', '<br>') + f'<br>[sound:{filename}]'
+            note = {
+                'deckName': DECK,
+                'modelName': model,
+                'fields': {'正面': html.escape(chinese).replace('\n', '<br>'), '背面': back},
+                'tags': ['en_collector', tag],
+                'options': {'allowDuplicate': False},
+            }
+            note_id = anki('addNote', note=note)
+            return ('added', note_id)
+
+        def done(value):
+            result, note_id = value
+            if result == 'duplicate':
+                self.status_var.set(f'这条英文之前已通过收集器添加过（笔记编号 {note_id}）。')
+                messagebox.showinfo('重复句子', '这句英文之前已经添加过，没有再次创建。')
+            else:
+                self.status_var.set(f'添加成功，笔记编号：{note_id}。可打开 Anki 查看。')
+                messagebox.showinfo('添加成功', f'已写入「{DECK}」。\n笔记编号：{note_id}\n\n如需在手机上查看，请使用 Anki 同步。')
+
+        self.work(operation, done)
+
+
+if __name__ == '__main__':
+    Collector().mainloop()
+
+```
